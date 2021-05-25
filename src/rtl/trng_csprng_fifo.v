@@ -58,7 +58,9 @@ module trng_csprng_fifo(
   localparam FIFO_ADDR_BITS = 2;
   localparam FIFO_ADDR_MAX  = FIFO_ADDR_BITS - 1;
   localparam FIFO_MAX       = (1 << FIFO_ADDR_BITS) - 1;
-
+  localparam FIFO_DEPTH_BITS= (1 << FIFO_ADDR_BITS);
+  localparam FIFO_DEPTH_MAX = FIFO_DEPTH_BITS - 1;
+  
   localparam WR_IDLE    = 0;
   localparam WR_WAIT    = 1;
   localparam WR_WRITE   = 2;
@@ -72,7 +74,7 @@ module trng_csprng_fifo(
   //----------------------------------------------------------------
   // Registers including update variables and write enable.
   //----------------------------------------------------------------
-  reg [511 : 0] fifo_mem [0 : FIFO_MAX];
+  reg [511 : 0] fifo_mem [0 : FIFO_DEPTH_MAX];
   reg           fifo_mem_we;
 
   reg [3 : 0] mux_data_ptr_reg;
@@ -93,8 +95,8 @@ module trng_csprng_fifo(
   reg                     wr_ptr_rst;
   reg                     wr_ptr_we;
 
-  reg [FIFO_ADDR_MAX : 0] fifo_ctr_reg;
-  reg [FIFO_ADDR_MAX : 0] fifo_ctr_new;
+  reg [FIFO_ADDR_MAX+1 : 0] fifo_ctr_reg;
+  reg [FIFO_ADDR_MAX+1 : 0] fifo_ctr_new;
   reg                     fifo_ctr_inc;
   reg                     fifo_ctr_dec;
   reg                     fifo_ctr_rst;
@@ -150,7 +152,7 @@ module trng_csprng_fifo(
           mux_data_ptr_reg <= 4'h0;
           rd_ptr_reg       <= {FIFO_ADDR_BITS{1'b0}};
           wr_ptr_reg       <= {FIFO_ADDR_BITS{1'b0}};
-          fifo_ctr_reg     <= {FIFO_ADDR_BITS{1'b0}};
+          fifo_ctr_reg     <= {FIFO_ADDR_BITS+1{1'b0}};
           rnd_data_reg     <= 32'h00000000;
           rnd_syn_reg      <= 0;
           more_data_reg    <= 0;
@@ -263,7 +265,7 @@ module trng_csprng_fifo(
       if (rd_ptr_inc)
         begin
           fifo_ctr_dec  = 1;
-          if (rd_ptr_reg == FIFO_MAX)
+          if (rd_ptr_reg == FIFO_DEPTH_MAX)
             rd_ptr_we  = 1;
           else
             begin
@@ -289,7 +291,7 @@ module trng_csprng_fifo(
 
       if (wr_ptr_inc)
         begin
-          if (wr_ptr_reg == FIFO_MAX)
+          if (wr_ptr_reg == FIFO_DEPTH_MAX)
             wr_ptr_we  = 1;
           else
             begin
@@ -311,7 +313,7 @@ module trng_csprng_fifo(
   //----------------------------------------------------------------
   always @*
     begin : fifo_ctr
-      fifo_ctr_new  = {FIFO_ADDR_BITS{1'b0}};
+      fifo_ctr_new  = {FIFO_ADDR_BITS+1{1'b0}};
       fifo_ctr_we   = 0;
       fifo_empty    = 0;
       fifo_full     = 0;
@@ -321,7 +323,7 @@ module trng_csprng_fifo(
           fifo_empty = 1;
         end
 
-      if (fifo_ctr_reg == FIFO_MAX)
+      if (fifo_ctr_reg == FIFO_DEPTH_BITS)
         begin
           fifo_full = 1;
         end
@@ -329,7 +331,7 @@ module trng_csprng_fifo(
       if (fifo_ctr_rst)
         fifo_ctr_we = 1;
 
-      if ((fifo_ctr_inc) && (fifo_ctr_reg < FIFO_MAX))
+      if ((fifo_ctr_inc) && (fifo_ctr_reg < FIFO_DEPTH_BITS))
         begin
           fifo_ctr_new = fifo_ctr_reg + 1'b1;
           fifo_ctr_we  = 1;
@@ -451,7 +453,7 @@ module trng_csprng_fifo(
                     more_data_new = 1;
                   end
 
-                if (csprng_data_valid)
+                if (!fifo_full & csprng_data_valid)
                   begin
                     fifo_mem_we      = 1;
                     wr_ptr_inc       = 1;
